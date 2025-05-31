@@ -1,84 +1,94 @@
-import axios from "axios";
-import { useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "react-hot-toast";
-import ROUTES from "../constants/routes";
-import useAuth from "./useAuth";
-import useLoginModal from "../hooks/useLoginModal";
+import { useCallback, useEffect, useRef, useState } from "react";
+import toast from "react-hot-toast";
+import api from "../action/axios-interceptor.js";
+import useAuth from "./useAuth.js";
+import useLoginModal from "./useLoginModal.js";
+
 const useFavourite = ({ listingId }) => {
   const { authToken, isAuthenticated } = useAuth();
+  const loginModal = useLoginModal();
   const [hasFavourite, setHasFavourite] = useState(false);
+  const requestInProgress = useRef(false);
+
+  // Fetch initial favorite status
   useEffect(() => {
-    const fetchData = () => {
-      if (isAuthenticated === false) {
-        return;
-      }
+    if (!isAuthenticated || !authToken) return;
+
+    const checkFavoriteStatus = async () => {
       try {
-        axios
-          .get(
-            ` http://localhost:8080/api/favourites`,
-            {
-              headers: {
-                Authorization: "Bearer " + authToken,
-              },
-              withCredentials: true,
-            }
-          )
-          .then((response) => {
-            const favourites = response.data.favouritePlaces.map(
-              (place) => place._id
-            );
-            setHasFavourite(favourites?.includes(listingId));
-          });
+        const response = await api.get("/api/favourites");
+        if (response.data && response.data.favouritePlaces) {
+          const isFavorite = response.data.favouritePlaces.some(
+            (place) => place._id === listingId || place.id === listingId
+          );
+          setHasFavourite(isFavorite);
+        }
       } catch (error) {
-        console.error("Error fetching user favourites:", error);
+        console.error("Error checking favorite status:", error);
       }
     };
 
-    fetchData();
-  }, [listingId]);
+    checkFavoriteStatus();
+  }, [listingId, authToken, isAuthenticated]);
 
-  const navigate = useNavigate();
-  const loginModal = useLoginModal();
-
-  const toggleFavourite = async () => {
-    if (!authToken) {
-      return loginModal.onOpen();
+  const toggleFavourite = useCallback(async () => {
+    // Don't proceed if there's already a request in progress
+    if (requestInProgress.current) {
+      return;
     }
+
+    if (!isAuthenticated) {
+      // open login modal
+      toast.error("Please log in to manage favorites");
+      loginModal.onOpen();
+      return;
+    }
+
+    requestInProgress.current = true;
+
     try {
-      let request;
+      let response;
       if (hasFavourite) {
-        request = () =>
-          axios.delete(`http://localhost:8080/api/favourite/${listingId}`, {
-            headers: {
-              Authorization: "Bearer " + authToken,
-            },
-            withCredentials: true,
-          });
+        response = await api.delete(`/api/favourite/${listingId}`);
       } else {
-        request = () =>
-          axios.post(
-            `http://localhost:8080/api/favourite/new/${listingId}`,
-            null,
-            {
-              headers: {
-                Authorization: "Bearer " + authToken,
-              },
-              withCredentials: true,
-            }
-          );
+        response = await api.post(`/api/favourite/new/${listingId}`);
       }
-      await request();
-      navigate(ROUTES.FAVOURITES);
-      toast.success(
-        `Listing has been ${
-          hasFavourite ? "removed from" : "added to"
-        } favourites`
-      );
+      console.log("Toggle favorite response:", response);
+
+      // Verify the server response indicates success
+      if (response.status >= 200 && response.status < 300) {
+        // Update UI based on the server's response, not optimistically
+        if (response.data && response.data.success !== undefined) {
+          // If the API returns a success flag, use it
+          setHasFavourite(response.data.success);
+        } else if (response.data && response.data.favouritePlaces) {
+          // If the API returns updated favorites, check if the current listing is included
+          const isFavorite = response.data.favouritePlaces.some(
+            (place) => place._id === listingId || place.id === listingId
+          );
+          setHasFavourite(isFavorite);
+        } else {
+          // If no clear indication from server, toggle based on current state
+          setHasFavourite((prev) => !prev);
+        }
+
+        // Success notification
+        toast.success(
+          hasFavourite ? "Removed from favorites" : "Added to favorites"
+        );
+      } else {
+        throw new Error("Failed to update favorite");
+      }
     } catch (error) {
-      toast.error("Something went wrong");
+      console.error("Error toggling favourite:", error);
+      toast.error("Failed to update favorite status");
+    } finally {
+      // Allow new requests after a delay
+      setTimeout(() => {
+        requestInProgress.current = false;
+      }, 1000);
     }
-  };
+  }, [listingId, isAuthenticated, hasFavourite]);
 
   return {
     hasFavourite,

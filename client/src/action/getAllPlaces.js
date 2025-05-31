@@ -1,30 +1,29 @@
-import axios from "axios";
 import toast from "react-hot-toast";
 import api from "./axios-interceptor.js";
 
-
 const getAllPlaces = async (searchUrl) => {
-    // console.log(searchUrl);
-    if (searchUrl === undefined || searchUrl === "") {
-        try {
-            // const response = await axios.get(`http://localhost:8080/api/places`);
-            const response = await api.get(`/api/places`);
-            console.log(response);
-            return response.data.places;
-        } catch (error) {
-            toast.error(error.response.data.message);
-            throw error;
-        }
-    } else {
-        try {
-            // const response = await axios.get(`http://localhost:8080/api/places?${searchUrl}`);
-            const response = await api.get(`/api/places?${searchUrl}`);
-            return response.data.places;
-        } catch (error) {
-            toast.error(error.response.data.message);
-            throw error;
-        }
+  let url = "/api/places";
+  // if query is placeOwner = true, then fetch places owned by the user
+  if (searchUrl.has("placeOwner") && searchUrl.get("placeOwner") === "true") {
+    url = `/api/places/owner`;
+  }
+  if (searchUrl === undefined || searchUrl === "") {
+    try {
+      const response = await api.get(url);
+      return response.data.places;
+    } catch (error) {
+      toast.error(error.response.data.message);
+      throw error;
     }
-}
+  } else {
+    try {
+      const response = await api.get(`${url}?${searchUrl.toString()}`);
+      return response.data.places;
+    } catch (error) {
+      toast.error(error.response.data.message);
+      throw error;
+    }
+  }
+};
 
 export default getAllPlaces;

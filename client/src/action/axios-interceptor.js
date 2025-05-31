@@ -58,7 +58,12 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     console.log(error.response.statusText);
     console.log("error response status", error.response.status);
-    if (error.response.status === 500 && !originalRequest._retry) {
+    if (
+      error.response.status === 500 &&
+      !originalRequest._retry &&
+      error.response.data.message === "jwt expired"
+    ) {
+      console.log("Refreshing token...");
       const isExcludedRoute = excludedRoutes.some((route) =>
         matchRoute(originalRequest.url, route, originalRequest.method)
       );
