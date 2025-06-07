@@ -1,27 +1,25 @@
 # ========================
 # ⚙️ Build stage
 # ========================
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.18 AS builder
 
 # Cài công cụ build để tránh lỗi native module (rollup)
-RUN apk add --no-cache python3 make g++
-
-# Enable yarn nếu dùng corepack
-RUN corepack enable
+RUN apk update && \
+    apk add --no-cache python3 make g++ build-base
 
 WORKDIR /app
 
-# Copy yarn.lock và package.json
-COPY package.json yarn.lock ./
+# Copy package.json
+COPY package.json ./
 
-# Cài dependencies
-RUN yarn install --frozen-lockfile
+# Sử dụng npm install thay vì npm ci
+RUN npm install
 
 # Copy toàn bộ source
 COPY . .
 
-# Build production
-RUN yarn build
+# Build production bằng npm
+RUN npm run build
 
 # ========================
 # 🚀 Production stage
